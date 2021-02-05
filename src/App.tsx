@@ -6,7 +6,27 @@ import { Node } from 'ts-morph';
 
 import parseSpec, { MochaNode, ParsedSpec, getBlock } from './parseSpec';
 
-const spec = `// paste spec here`;
+const spec = `
+// paste spec here
+
+// example:
+
+describe('test D', () => {
+
+	before(() => {
+		beforeCommand();
+	});
+
+	it('should test 1', () => {
+		command1();
+	});
+
+	it('should test 2', () => {
+		command2();
+	});
+
+});
+`;
 
 function removeBraces(code: string): string {
 	return code.trim().substring(1, code.length - 2);
@@ -30,18 +50,30 @@ function processNew(node: MochaNode, log: string, hooks?: Hooks): string {
 		};
 
 		let newLog: string;
+		let children = [...node.children];
+
+		let rootHooks = '';
+
 		if (log === '__rootDescribe') {
 			newLog = '';
+
+			const befores = children.filter(node => node.type === 'before');
+			const afters = children.filter(node => node.type === 'after');
+
+			rootHooks += befores.map(b => b.node.getFullText()).join('\n');
+			rootHooks += afters.map(a => a.node.getFullText()).join('\n');
+
+			children = children.filter(node => node.type !== 'before' && node.type !== 'after');
 		} else {
 			newLog = `${log ? `${log} - ` : ''}${node.title}`;
 		}
 
-		const beforeEach = node.children.filter(node => node.type === 'beforeEach').map(n => processNew(n, newLog)).join('\n');
-		const afterEach = node.children.filter(node => node.type === 'afterEach').map(n => processNew(n, newLog)).join('\n');
+		const beforeEach = children.filter(node => node.type === 'beforeEach').map(n => processNew(n, newLog)).join('\n');
+		const afterEach = children.filter(node => node.type === 'afterEach').map(n => processNew(n, newLog)).join('\n');
 
 		let currentPart = structure.before;
 
-		node.children.forEach(child => {
+		children.forEach(child => {
 			if (child.type === 'before') {
 				structure.before.push(processNew(child, newLog));
 			} else if (child.type === 'after') {
@@ -60,7 +92,27 @@ function processNew(node: MochaNode, log: string, hooks?: Hooks): string {
 			}
 		});
 
-		const result = structure.before.join('\n') + structure.main.join('\n') + structure.after.join('\n');
+		let result = '';
+
+		if (log === '__rootDescribe') {
+			result = `
+				${structure.before.join('\n')}
+				
+				${rootHooks}
+				
+				it('should pass', () => {
+					${structure.main.join('\n')}
+				});
+			`;
+		} else {
+			result = `
+				${structure.before.join('\n')}
+
+				${structure.main.join('\n')}
+			
+				${structure.after.join('\n')}
+			`;
+		}
 
 		if (hooks) {
 			return hooks.beforeEach + result + hooks.afterEach;
@@ -177,6 +229,7 @@ function App() {
   const [specFile, setSpecFile] = useState(spec);
   const [parsedFile, setParsedFile] = useState<ParsedSpec | undefined>();
   const [selected, setSelected] = useState<number[]>([]);
+	const [disabled, setDisabled] = useState<number[]>([]);
   const [processedFile, setProcessedFile] = useState('');
 
 	useEffect(() => {
@@ -184,34 +237,25 @@ function App() {
 	}, [specFile]);
 
   useEffect(() => {
-    if (!specFile || !parsedFile || selected.length === 0) return;
+    if (!specFile) return;
 
     const parsedFile2 = parseSpec(specFile);
 
-		const selectedDescribe = parsedFile2.mochaNodes.filter(node => node.type === 'describe')[selected[0]];
+		selected.forEach(describeIndex => {
+			const selectedDescribe = parsedFile2.mochaNodes
+				.filter(node => node.type === 'describe')[describeIndex];
 
-		const processedDescribe = processNew(selectedDescribe, '__rootDescribe');
+			const processedDescribe = processNew(selectedDescribe, '__rootDescribe');
 
-		// selectedDescribe.children.forEach(child => {
-		// 	if (Node.isExpressionStatement(child.node)) {
-		// 		child.node.remove();
-		// 	}
-		// });
+			const result = `
+				describe(\`${selectedDescribe.title}\`, () => {
+					${processedDescribe}
+				});
+			`
 
-		// const declarations = getBlock(selectedDescribe.node);
-
-		const result = `
-			it('${selectedDescribe.title}', () => {
-				${/*declarations ? removeBraces(declarations.getFullText()) : ''*/''}
-				${processedDescribe}
-			});
-		`
-
-		parsedFile2.mochaNodes.filter(node => node.type === 'describe')[selected[0]].node.replaceWithText(
-			// prettier.format(result, { parser: 'typescript', plugins: [ parserTypescript ]})
-			result
-		);
-		
+			selectedDescribe.node = selectedDescribe.node.replaceWithText(result);
+		});
+			
 		try {
 			const pretty = prettier.format(parsedFile2.sourceFile.getText(), { parser: 'typescript', plugins: [ parserTypescript ]})
 			setProcessedFile(pretty);
@@ -219,7 +263,47 @@ function App() {
 			parsedFile2.sourceFile.formatText();
 			setProcessedFile(parsedFile2.sourceFile.getText());
 		}
-  }, [specFile, parsedFile, selected]);
+  }, [specFile, selected]);
+
+	function onChangeSelected(prev: number[], index: number, checked: boolean): number[] {
+		if (!parsedFile) return [];
+		
+		const describes = parsedFile.mochaNodes.filter(node => node.type === 'describe');
+
+		let newSelected = [...prev];
+		let newDisabled = [...disabled];
+
+		if (checked) {
+			newSelected.push(index);
+		} else {
+			newSelected = newSelected.filter(a => a !== index);
+		}
+
+		if (index < describes.length - 1) {
+			const following = describes
+				.map((node, index) => ({ node, index }))
+				.slice(index + 1)
+
+			let levelBelow = true;
+
+			for (let i = 0; i < following.length && levelBelow; i++) {
+				if (following[i].node.level <= describes[index].level) {
+					levelBelow = false;
+				} else {
+					const ind = following[i].index;
+					if (checked) {
+						newSelected = newSelected.filter(a => a !== ind);
+						newDisabled.includes(ind) || newDisabled.push(ind);
+					} else {
+						newDisabled = newDisabled.filter(a => a !== ind);
+					}
+				}
+			}
+		}
+
+		setDisabled(newDisabled);
+		return newSelected;
+	}
 
   return (
     <div className="App" style={{ display: 'flex', flexDirection: 'row' }}>
@@ -229,12 +313,17 @@ function App() {
         defaultLanguage="typescript"
         defaultValue={specFile}
         onChange={value => {
+					setDisabled([]);
+					setSelected([]);
           if (value) {
             setSpecFile(value);
           }
         }}
       />
       <div style={{ width: '20vw' }}>
+				<br />
+				Select describes you want to merge into one it:
+				<br /><br />
         {parsedFile && parsedFile
 					.mochaNodes
 					.filter(node => node.type === 'describe')
@@ -242,13 +331,9 @@ function App() {
 						return (
 							<div key={index}>
 								<label style={{ paddingLeft: node.level * 20 }}>
-									<input type="checkbox" onChange={event => {
+									<input type="checkbox" checked={selected.includes(index)} disabled={disabled.includes(index)} onChange={event => {
 										setSelected(prev => {
-											if (event.target.checked) {
-												return [...prev, index];
-											} else {
-												return prev.filter(a => a !== index);
-											}
+											return onChangeSelected(prev, index, event.target.checked);
 										});
 									}} />
 									{' '}{node.title}
