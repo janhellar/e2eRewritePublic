@@ -160,7 +160,7 @@ function processNew(node: MochaNode, log: string, hooks?: Hooks): string {
 			const blocksInside = getBlocksInside(node);
 
 			blocksInside.forEach(block => {
-				block.node = block.node.replaceWithText(`{${processNew(block, log)}}`);
+				block.node = block.node.replaceWithText(`{${processNew(block, log, hooks)}}`);
 			});
 		}
 		
