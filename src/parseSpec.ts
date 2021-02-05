@@ -134,7 +134,7 @@ function flatten(nodes: MochaNode[], level: number = 0): MochaNode[] {
 	nodes.forEach(node => {
 		node.level = level;
 		result.push(node);
-		result.push(...flatten(node.children, level + 1));
+		result.push(...flatten(node.children, node.type === 'describe' ? level + 1 : level));
 	});
 
 	return result;
