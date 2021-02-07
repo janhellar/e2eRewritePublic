@@ -80,11 +80,10 @@ function App() {
 					minimap: {
 						enabled: false,
 					},
-					theme: 'vs-dark',
 					lineNumbers: "off",
 				}}
       />
-      <div style={{ width: '20vw', padding: 20 }}>
+      <div style={{ width: '20vw', padding: 20, borderLeft: '1px solid lightgrey', borderRight: '1px solid lightgrey' }}>
 				<h2>source spec -{'>'} flattened spec</h2>
 				Select <i>describes</i> you want to flatten:
 				<br /><br />
@@ -117,7 +116,6 @@ function App() {
 						minimap: {
 							enabled: false,
 						},
-						theme: 'vs-dark',
 						lineNumbers: "off",
 					}}
         />
