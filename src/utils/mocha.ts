@@ -66,7 +66,7 @@ function flattenDescribeSpec(node: Node<ts.Node>): string {
   const logPrefix = '';
   const hooks = getFlattenedHooks(block);
   const eachHooks = getFlattenedEachHooks(block, logPrefix);
-  const children = block.getChildren().filter(node => !isMochaHook(node));
+  const children = getChildren(block).filter(node => !isMochaHook(node));
   const sections = sortDescribeContent(children);
 
   return `
@@ -83,7 +83,7 @@ function flattenDescribeSpec(node: Node<ts.Node>): string {
 }
 
 function containsItOrDescribe(node: Node<ts.Node>): boolean {
-	return node.getChildren().reduce<boolean>((prev, curr) => {
+	return getChildren(node).reduce<boolean>((prev, curr) => {
 		if (prev) return true;
 		if (isMochaCallOfType(curr, 'it') || isMochaCallOfType(curr, 'describe')) return true;
 		return containsItOrDescribe(curr);
@@ -113,7 +113,7 @@ function flattenDescribe(node: Node<ts.Node>, logPrefix: string, eachHooks?: Eac
 
   if (!block) return '';
 
-  const sections = sortDescribeContent(block.getChildren());
+  const sections = sortDescribeContent(getChildren(block));
   const newLogPrefix = prependLog(logPrefix, getMochaCallTitle(node));
   const eachHooksInside = getFlattenedEachHooks(block, newLogPrefix);
 
@@ -192,14 +192,14 @@ function getFlattenedEachHooks(block: Node<ts.Node>, logPrefix: string): EachHoo
 }
 
 function getFlattenedEachHooksOfType(block: Node<ts.Node>, hookType: string, logPrefix: string): string {
-  return block.getChildren()
+  return getChildren(block)
     .filter(node => isMochaCallOfType(node, hookType))
     .map(node => flatten(node, logPrefix))
     .join('\n');
 }
 
 function getFlattenedHooks(block: Node<ts.Node>): string {
-  const children = block.getChildren();
+  const children = getChildren(block);
 
   const befores = children.filter(node => isMochaCallOfType(node, 'before'));
   const afters = children.filter(node => isMochaCallOfType(node, 'after'));
@@ -283,4 +283,14 @@ function getMochaCallTitle(node: Node<ts.Node>): string {
   }
 
   return '';
+}
+
+function getChildren(node: Node<ts.Node>): Node<ts.Node>[] {
+  const result: Node<ts.Node>[] = [];
+
+  node.forEachChild(child => {
+    result.push(child)
+  });
+  
+  return result;
 }

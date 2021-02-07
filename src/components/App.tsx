@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 
-import exampleSpec from './exampleSpec';
-import { getParsedSourceFile } from './utils/typescript';
-import { getDescribeCalls, flattenDescribeSpecs, DescribeCall } from './utils/mocha';
+import exampleSpec from '../fixtures/exampleSpec';
+import { getParsedSourceFile } from '../utils/typescript';
+import { getDescribeCalls, flattenDescribeSpecs } from '../utils/mocha';
 
 function App() {
   const [sourceFile, setSourceFile] = useState(getParsedSourceFile(exampleSpec));
@@ -14,10 +14,12 @@ function App() {
   useEffect(() => {
     if (!sourceFile) return;
 
-		const describes = getDescribeCalls(sourceFile);
+		const targetFile = getParsedSourceFile(sourceFile.getFullText());
+
+		const describes = getDescribeCalls(targetFile.getFirstChild()?.getParent()!);
 		const selectedDescribes = describes.filter((_, index) => selected.includes(index));
 
-		setTargetFile(flattenDescribeSpecs(sourceFile, selectedDescribes));
+		setTargetFile(flattenDescribeSpecs(targetFile, selectedDescribes));
   }, [sourceFile, selected]);
 
 	function onChangeSelected(prev: number[], index: number, checked: boolean): number[] {
@@ -61,9 +63,9 @@ function App() {
 	}
 
   return (
-    <div className="App" style={{ display: 'flex', flexDirection: 'row' }}>
+    <div className="App" style={{ display: 'flex', flexDirection: 'row', overflowY: 'hidden' }}>
       <Editor
-        height="90vh"
+        height="100vh"
         width="40vw"
         defaultLanguage="typescript"
         defaultValue={exampleSpec}
@@ -74,9 +76,16 @@ function App() {
             setSourceFile(getParsedSourceFile(value));
           }
         }}
+				options={{
+					minimap: {
+						enabled: false,
+					},
+					theme: 'vs-dark',
+					lineNumbers: "off",
+				}}
       />
-      <div style={{ width: '20vw' }}>
-				<br />
+      <div style={{ width: '20vw', padding: 20 }}>
+				<h2>source spec -{'>'} flattened spec</h2>
 				Select <i>describes</i> you want to flatten:
 				<br /><br />
         {sourceFile && getDescribeCalls(sourceFile)
@@ -99,10 +108,18 @@ function App() {
       </div>
       <div>
         <Editor
-          height="90vh"
+          height="100vh"
           width="40vw"
           defaultLanguage="typescript"
           value={targetFile}
+					options={{
+						readOnly: true,
+						minimap: {
+							enabled: false,
+						},
+						theme: 'vs-dark',
+						lineNumbers: "off",
+					}}
         />
       </div>
     </div>
