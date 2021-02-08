@@ -131,7 +131,7 @@ function flattenDescribe(node: Node<ts.Node>, logPrefix: string, eachHooks?: Eac
 function flattenNodes(nodes: Node<ts.Node>[], logPrefix: string, eachHooks?: EachHooks): string {
   return nodes
     .map(node => flatten(node, logPrefix, eachHooks))
-    .join('\n');
+    .join(' ');
 }
 
 function flattenIt(node: Node<ts.Node>, logPrefix: string, eachHooks?: EachHooks): string {
