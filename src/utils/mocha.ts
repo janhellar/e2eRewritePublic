@@ -51,7 +51,15 @@ export function flattenDescribeSpecs(sourceFile: SourceFile, describeCalls: Desc
   });
     
   try {
-    return prettier.format(sourceFile.getText(), { parser: 'typescript', plugins: [ parserTypescript ]});
+    return prettier.format(sourceFile.getText(), {
+      parser: 'typescript',
+      plugins: [ parserTypescript ],
+      useTabs: true,
+      singleQuote: true,
+      trailingComma: 'all',
+      arrowParens: 'always',
+      endOfLine: 'lf',
+    });
   } catch (_) {
     sourceFile.formatText();
     return sourceFile.getText();
@@ -118,11 +126,13 @@ function flattenDescribe(node: Node<ts.Node>, logPrefix: string, eachHooks?: Eac
   const eachHooksInside = getFlattenedEachHooks(block, newLogPrefix);
 
   const result = `
-    ${flattenNodes(sections.before, newLogPrefix)}
+    {
+      ${flattenNodes(sections.before, newLogPrefix)}
 
-    ${flattenNodes(sections.main, newLogPrefix, eachHooksInside)}
+      ${flattenNodes(sections.main, newLogPrefix, eachHooksInside)}
 
-    ${flattenNodes(sections.after, newLogPrefix)}
+      ${flattenNodes(sections.after, newLogPrefix)}
+    }
   `;
 
   return wrapCodeWithEachHooks(result, eachHooks);
