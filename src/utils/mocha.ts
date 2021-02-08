@@ -125,15 +125,19 @@ function flattenDescribe(node: Node<ts.Node>, logPrefix: string, eachHooks?: Eac
   const newLogPrefix = prependLog(logPrefix, getMochaCallTitle(node));
   const eachHooksInside = getFlattenedEachHooks(block, newLogPrefix);
 
-  const result = `
-    {
-      ${flattenNodes(sections.before, newLogPrefix)}
+  let result = `
+    ${flattenNodes(sections.before, newLogPrefix)}
 
-      ${flattenNodes(sections.main, newLogPrefix, eachHooksInside)}
+    ${flattenNodes(sections.main, newLogPrefix, eachHooksInside)}
 
-      ${flattenNodes(sections.after, newLogPrefix)}
-    }
+    ${flattenNodes(sections.after, newLogPrefix)}
   `;
+
+  if (!redundantCurlyBraces(block)) {
+    result = `{
+      ${result}
+    }`;
+  }
 
   return wrapCodeWithEachHooks(result, eachHooks);
 }
@@ -149,10 +153,12 @@ function flattenIt(node: Node<ts.Node>, logPrefix: string, eachHooks?: EachHooks
   
   if (!block) return '';
 
-  return `
+  const result = `
     ${getCyLog(logPrefix, node)}
-    ${wrapCodeWithEachHooks(block.getFullText(), eachHooks)}
+    ${removeRedundantCurlyBraces(block)}
   `;
+
+  return wrapCodeWithEachHooks(result, eachHooks);
 }
 
 function flattenHook(node: Node<ts.Node>, logPrefix: string): string {
@@ -162,7 +168,7 @@ function flattenHook(node: Node<ts.Node>, logPrefix: string): string {
     
   return `
     ${getCyLog(logPrefix, node)}
-    ${block.getFullText()}
+    ${removeRedundantCurlyBraces(block)}
   `;
 }
 
@@ -303,4 +309,24 @@ function getChildren(node: Node<ts.Node>): Node<ts.Node>[] {
   });
   
   return result;
+}
+
+function redundantCurlyBraces(block: Node<ts.Node>): boolean {
+  let redundant = true;
+
+  block.forEachChild(child => {
+    if (Node.isVariableStatement(child) || Node.isFunctionDeclaration(child)) {
+      redundant = false;
+    }
+  });
+
+  return redundant;
+}
+
+function removeRedundantCurlyBraces(block: Node<ts.Node>): string {
+  if (redundantCurlyBraces(block)) {
+    return removeSurroundingChars(block.getText());
+  }
+  
+  return block.getFullText();
 }

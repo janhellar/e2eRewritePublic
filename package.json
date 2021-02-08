@@ -12,6 +12,7 @@
     "@types/node": "^12.19.16",
     "@types/react": "^17.0.1",
     "@types/react-dom": "^17.0.0",
+    "eslint": "^7.19.0",
     "lodash": "^4.17.20",
     "monaco-editor": "^0.21.3",
     "prettier": "^2.2.1",
