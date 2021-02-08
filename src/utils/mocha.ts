@@ -5,9 +5,7 @@ import parserTypescript from 'prettier/parser-typescript';
 import { getCallIdentifier, getChildOfKind, getCallbackBlock, getBlocksInside } from './typescript';
 import { removeSurroundingChars } from './common';
 
-export const mochaHooks = ['afterEach', 'after', 'beforeEach', 'before'];
-export const mochaFunctions = ['describe', 'it', ...mochaHooks];
-
+const mochaHooks = ['afterEach', 'after', 'beforeEach', 'before'];
 export interface DescribeCall {
   title: string;
   level: number;
@@ -29,7 +27,7 @@ export function getDescribeCalls(node: Node<ts.Node> | SourceFile, level: number
   const result: DescribeCall[] = [];
 
   node.forEachChild(n => {
-    const isDescribe = isDescribeCall(n);
+    const isDescribe = isMochaCallOfType(n, 'describe');
 
     if (isDescribe) {
       result.push({
@@ -78,7 +76,7 @@ function flattenDescribeSpec(node: Node<ts.Node>): string {
   const sections = sortDescribeContent(children);
 
   return `
-    describe(\`${getMochaCallTitle(node)}\`, () => {
+    describe${isSkipped(node) ? '.skip' : ''}(${wrapWithQuotes(getMochaCallTitle(node))}, () => {
       ${flattenNodes(sections.before, logPrefix)}
       
       ${hooks}
@@ -99,21 +97,27 @@ function containsItOrDescribe(node: Node<ts.Node>): boolean {
 }
 
 function flatten(node: Node<ts.Node>, logPrefix: string, eachHooks?: EachHooks): string {
-	if (isMochaCallOfType(node, 'describe')) {
+  if (isMochaCallOfType(node, 'describe')) {
 		return flattenDescribe(node, logPrefix, eachHooks);
-	} else if (isMochaCallOfType(node, 'it')) {
-		return flattenIt(node, logPrefix, eachHooks);
-	} else if (isMochaHook(node)) {
-		return flattenHook(node, logPrefix);
-	} else if (Node.isBlock(node)) {
-		return flattenBlock(node, logPrefix, eachHooks);
-	} else {
-		if (containsItOrDescribe(node)) {
-			flattenBlocksInside(node, logPrefix, eachHooks);
-		}
-		
-		return node.getFullText();
 	}
+  
+  if (isMochaCallOfType(node, 'it')) {
+		return flattenIt(node, logPrefix, eachHooks);
+	}
+  
+  if (isMochaHook(node)) {
+		return flattenHook(node, logPrefix);
+	}
+  
+  if (Node.isBlock(node)) {
+		return flattenBlock(node, logPrefix, eachHooks);
+	}
+
+  if (containsItOrDescribe(node)) {
+    flattenBlocksInside(node, logPrefix, eachHooks);
+  }
+  
+  return node.getFullText();
 }
 
 function flattenDescribe(node: Node<ts.Node>, logPrefix: string, eachHooks?: EachHooks): string {
@@ -139,7 +143,13 @@ function flattenDescribe(node: Node<ts.Node>, logPrefix: string, eachHooks?: Eac
     }`;
   }
 
-  return wrapCodeWithEachHooks(result, eachHooks);
+  result = wrapCodeWithEachHooks(result, eachHooks);
+
+  if (isSkipped(node)) {
+    result = wrapWithSkipCode(result);
+  }
+
+  return result;
 }
 
 function flattenNodes(nodes: Node<ts.Node>[], logPrefix: string, eachHooks?: EachHooks): string {
@@ -153,12 +163,18 @@ function flattenIt(node: Node<ts.Node>, logPrefix: string, eachHooks?: EachHooks
   
   if (!block) return '';
 
-  const result = `
+  let result = `
     ${getCyLog(logPrefix, node)}
     ${removeRedundantCurlyBraces(block)}
   `;
 
-  return wrapCodeWithEachHooks(result, eachHooks);
+  result = wrapCodeWithEachHooks(result, eachHooks);
+
+  if (isSkipped(node)) {
+    result = wrapWithSkipCode(result);
+  }
+
+  return result;
 }
 
 function flattenHook(node: Node<ts.Node>, logPrefix: string): string {
@@ -193,7 +209,7 @@ function flattenBlocksInside(node: Node<ts.Node>, logPrefix: string, eachHooks?:
 function getCyLog(prefix: string, node: Node<ts.Node>): string {
   const log = `${getCallIdentifier(node)} ${getMochaCallTitle(node)}`.trim();
 
-  return `cy.log(\`${prependLog(prefix, log)}\`);`;
+  return `cy.log(${wrapWithQuotes(prependLog(prefix, log))});`;
 }
 
 function prependLog(prefix: string, log: string): string {
@@ -257,19 +273,19 @@ function sortDescribeContent(nodes: Node<ts.Node>[]): DescribeSections {
   return sections;
 }
 
-function isDescribeCall(node: Node<ts.Node>): boolean {
+function isMochaCallOfType(node: Node<ts.Node>, type: string): boolean {
   if (Node.isExpressionStatement(node)) {
     const callIdentifier = getCallIdentifier(node);
-    return callIdentifier === 'describe';
+    return callIdentifier === type || callIdentifier === `${type}.skip`;
   }
 
   return false;
 }
 
-function isMochaCallOfType(node: Node<ts.Node>, type: string): boolean {
+function isSkipped(node: Node<ts.Node>): boolean {
   if (Node.isExpressionStatement(node)) {
     const callIdentifier = getCallIdentifier(node);
-    return callIdentifier === type;
+    return callIdentifier.endsWith('.skip');
   }
 
   return false;
@@ -329,4 +345,23 @@ function removeRedundantCurlyBraces(block: Node<ts.Node>): string {
   }
   
   return block.getFullText();
+}
+
+function wrapWithSkipCode(code: string): string {
+  return `
+    {
+      const skip = true;
+      if (!skip) {
+        ${code}
+      }
+    }
+  `;
+}
+
+function wrapWithQuotes(text: string): string {
+  if (text.match(/.*\$\{.*\}.*/)) {
+    return '`' + text + '`';
+  }
+
+  return `'${text}'`;
 }

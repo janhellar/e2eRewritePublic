@@ -10,7 +10,10 @@ export function getCallIdentifier(node: Node<ts.Node>): string {
     const expression = node.getExpression();
     if (Node.isCallExpression(expression)) {
       const leftHandSideExpression = expression.getExpression();
-      if (Node.isIdentifier(leftHandSideExpression)) {
+      if (
+        Node.isIdentifier(leftHandSideExpression) ||
+        Node.isPropertyAccessExpression(leftHandSideExpression)
+      ) {
         return leftHandSideExpression.getText();
       }
     }
